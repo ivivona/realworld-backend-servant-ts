@@ -101,7 +101,7 @@ export function queryParams<F extends string, O>(
   return { name, decoder: decoder ?? noOpD };
 }
 
-export type HeaderValue = number | string | string[];
+export type HeaderValue = undefined | number | string | string[];
 export type FromHeaderValue<I extends HeaderValue, O> = (
   param: I
 ) => t.Validation<O>;
@@ -284,11 +284,11 @@ export interface EndpointDefinition
     HasResHeaders<ResHeader<string, any, any>[]>,
     HasResponse<MimeEncoder<any, any>, StatusCode> {}
 
-interface Builder<E> {
+export interface Builder<E> {
   readonly endpoint: E;
 }
 
-type NoBody<
+export type NoBody<
   T extends Builder<any>,
   M extends HttpMethod
 > = T["endpoint"] extends HasHTTPMethod<M> ? Omit<T, "body"> : T;
@@ -439,7 +439,7 @@ class BuildReqHeader<
   }
 }
 
-function zipWith<A, B, C>(
+export function zipWith<A, B, C>(
   fa: Array<A>,
   fb: Array<B>,
   f: (a: A, b: B) => C
