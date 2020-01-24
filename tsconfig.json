@@ -11,10 +11,10 @@
     "noFallthroughCasesInSwitch": true,
     "noEmitOnError": true,
     "allowJs": false,
-    "target": "es5",
+    "target": "es2017",
     "moduleResolution": "node",
     "forceConsistentCasingInFileNames": true,
-    "lib": ["es6"]
+    "lib": ["es2017"]
   },
   "include": ["./index.ts"]
 }

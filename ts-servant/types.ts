@@ -23,10 +23,10 @@ type JsonValue =
   | number
   | boolean
   | {
-      [x: string]: JsonValue;
+      [x: string]: JsonValue | undefined;
     }
   | JsonValue[];
-class JsonC extends MimeType<JsonValue> {
+export class JsonC extends MimeType<JsonValue> {
   readonly mimeType: string = "application/json; charset=utf-8";
 }
 export const Json = new JsonC();
@@ -38,6 +38,8 @@ export const PlainText = new PlainTextC();
 // export class Raw extends MimeType<Buffer> {}
 
 // export type MimeType = "application/json" | "text/html" | "text/plain";
+
+export const Empty = (): JsonValue => null;
 
 export type FromURLFragment<O> = (fragment: string) => t.Validation<O>;
 
@@ -274,6 +276,7 @@ export class MimeEncoder<M extends MimeType<any>, I> {
 
 export interface EndpointDefinition
   extends HasURLPath,
+    HasCaptures<Capture<any, any>[]>,
     HasHTTPMethod<HttpMethod>,
     HasReqHeaders<ReqHeader<any, any, any>[]>,
     HasQueryParams<QueryParam<string, any>[]>,

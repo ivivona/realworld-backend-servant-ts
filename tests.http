@@ -1,0 +1,101 @@
+@BASE_URL = http://localhost:3000/api
+###
+POST {{BASE_URL}}/users
+Content-Type: application/json
+
+{
+  "user": {
+    "username": "nacho",
+    "email": "nacho@test.com",
+    "password": "1234567890"
+  }
+}
+###
+POST {{BASE_URL}}/users
+Content-Type: application/json
+
+{
+  "user": {
+    "username": "pablo",
+    "email": "pablo@test.com",
+    "password": "qwertyuiop"
+  }
+}
+###
+POST {{BASE_URL}}/users/login
+Content-Type: application/json
+
+{
+  "user": {
+    "email": "aa@bb.com",
+    "password": "aakasjdlkadadaa"
+  }
+}
+###
+POST {{BASE_URL}}/users/login
+Content-Type: application/json
+
+{
+  "user": {
+    "email": "nacho@test.com",
+    "password": "aakasjdlkadadaa"
+  }
+}
+###
+POST {{BASE_URL}}/users/login
+Content-Type: application/json
+
+{
+  "user": {
+    "email": "nacho2@text.com",
+    "password": "1234567890"
+  }
+}
+###
+GET {{BASE_URL}}/user
+Content-Type: application/json
+Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5MjA5MDM3LCJleHAiOjE1NzkyMTAyMzd9.Rz7jNtHCGaIU9C_LthKgQ8mTR1VT5nwXGm3kn4xeolQ
+###
+PUT {{BASE_URL}}/user
+Content-Type: application/json
+Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5MjExMTczLCJleHAiOjE1NzkyMTIzNzN9.xnOSB8PgGJCp7irMghorIpRIWwAanHwD6EvWxy5PT6I
+
+{
+  "user": {
+    "bio": "Soy nacho again!!"
+  }
+}
+###
+GET {{BASE_URL}}/profiles/pablo
+Content-Type: application/json
+Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5MjA5MDM3LCJleHAiOjE1NzkyMTAyMzd9.Rz7jNtHCGaIU9C_LthKgQ8mTR1VT5nwXGm3kn4xeolQ
+###
+GET {{BASE_URL}}/profiles/nacho
+Content-Type: application/json
+###
+POST {{BASE_URL}}/articles
+Content-Type: application/json
+Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5NjE2MjkxLCJleHAiOjE1Nzk2MTc0OTF9.g8_pYkbEwf-zE1VpIQNLEwMXhnXFnqY3IEOVJLlyvAQ
+
+{
+  "article": {
+    "title": "Hola Mundo!",
+    "description": "test 1234",
+    "body": "klsdjflk sqdfkl jsdkl fqskldfqklsd cjqkw jwq jkqwnfkq sdnf kjqsndf lkqs",
+    "tagList": ["test-1234", "otro-tag"]
+  }
+}
+###
+POST {{BASE_URL}}/articles/how-to-train-your-dragon-9/favorite
+Content-Type: application/json
+Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5NjI3NDcyLCJleHAiOjE1Nzk2Mjg2NzJ9.9Q5wvCG4lkJ1Qkda_NPHa9RGLvtZ-ukpLoOxcSjEK8E
+###
+DELETE {{BASE_URL}}/articles/how-to-train-your-dragon-9/favorite
+Content-Type: application/json
+Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5NjI3NDcyLCJleHAiOjE1Nzk2Mjg2NzJ9.9Q5wvCG4lkJ1Qkda_NPHa9RGLvtZ-ukpLoOxcSjEK8E
+###
+GET http://localhost:3000/api/articles/how-to-train-your-dragon-16/comments
+###
+GET http://localhost:3000/api/articles
+###
+GET http://localhost:3000/api/articles?tag=dragons

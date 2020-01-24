@@ -12,6 +12,7 @@ import {
 } from "../ts-servant";
 import { Tail } from "type-ts";
 import * as express from "express";
+import { Capture } from "../ts-servant/types";
 
 type QueryMap<Q extends QueryParam<string, any>[]> = {
   "0": {};
@@ -39,13 +40,23 @@ type WithBody<A> = A extends { bodyDecoder: infer B }
     : {}
   : {};
 
+type CaptureMap<Q extends Capture<any, any>[]> = {
+  "0": {};
+  n: { [k in Q[0]["identifier"]]: Q[0]["_O"] } & CaptureMap<Tail<Q>>;
+}[Q extends [] ? "0" : "n"];
+type WithCaptures<A> = A extends { captures: infer C }
+  ? C extends Capture<any, any>[]
+    ? { captures: CaptureMap<C> }
+    : {}
+  : {};
+
 type ApiEndpoint = Partial<EndpointDefinition> &
   HasURLPath &
   HasHTTPMethod<HttpMethod> &
   HasResponse<MimeEncoder<any, any>, StatusCode>;
 
 type Handler<A extends ApiEndpoint> = (
-  ctx: WithQueryParams<A> & WithHeaders<A> & WithBody<A>
+  ctx: WithCaptures<A> & WithQueryParams<A> & WithHeaders<A> & WithBody<A>
 ) => Promise<A["resEncoder"]["_I"]> | A["resEncoder"]["_I"];
 
 export function addToRouter<A extends ApiEndpoint>(
@@ -62,6 +73,18 @@ export function addToRouter<A extends ApiEndpoint>(
   ) {
     try {
       const ctx = ({
+        captures: api.captures?.reduce((cs, c) => {
+          const value = c.decoder(req.param(c.identifier));
+          switch (value._tag) {
+            case "Left":
+              throw value;
+            case "Right":
+              return {
+                ...cs,
+                [c.identifier]: value.right
+              };
+          }
+        }, {}),
         headers: api.reqHeaders?.reduce((hs, h) => {
           const value = h.decoder(req.header(h.name));
           switch (value._tag) {
@@ -98,7 +121,10 @@ export function addToRouter<A extends ApiEndpoint>(
           }
           return undefined;
         })()
-      } as any) as WithQueryParams<A> & WithHeaders<A> & WithBody<A>;
+      } as any) as WithCaptures<A> &
+        WithQueryParams<A> &
+        WithHeaders<A> &
+        WithBody<A>;
       const result = await handler(ctx);
       res.status(api.status);
       res.setHeader("Content-Type", api.resEncoder.contentType.mimeType);
@@ -109,33 +135,36 @@ export function addToRouter<A extends ApiEndpoint>(
       next(e);
     }
   };
+  const end = function(_req: express.Request, res: express.Response) {
+    res.end();
+  };
   switch (api.method) {
     case "GET":
-      router.get(api.path, middleware);
+      router.get(api.path, middleware, end);
       return router;
     case "POST":
-      router.post(api.path, middleware);
+      router.post(api.path, middleware, end);
       return router;
     case "PUT":
-      router.put(api.path, middleware);
+      router.put(api.path, middleware, end);
       return router;
     case "PATCH":
-      router.patch(api.path, middleware);
+      router.patch(api.path, middleware, end);
       return router;
     case "DELETE":
-      router.delete(api.path, middleware);
+      router.delete(api.path, middleware, end);
       return router;
     case "HEAD":
-      router.head(api.path, middleware);
+      router.head(api.path, middleware, end);
       return router;
     case "TRACE":
-      router.trace(api.path, middleware);
+      router.trace(api.path, middleware, end);
       return router;
     case "CONNECT":
-      router.connect(api.path, middleware);
+      router.connect(api.path, middleware, end);
       return router;
     case "OPTIONS":
-      router.options(api.path, middleware);
+      router.options(api.path, middleware, end);
       return router;
   }
   exhaustiveCheck(api.method);
