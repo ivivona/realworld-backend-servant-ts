@@ -70,7 +70,7 @@ GET {{BASE_URL}}/profiles/pablo
 Content-Type: application/json
 Authorization: Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJSRUFMV09SRC1UUyIsInN1YiI6Im5hY2hvIiwiaWF0IjoxNTc5MjA5MDM3LCJleHAiOjE1NzkyMTAyMzd9.Rz7jNtHCGaIU9C_LthKgQ8mTR1VT5nwXGm3kn4xeolQ
 ###
-GET {{BASE_URL}}/profiles/nacho
+GET {{BASE_URL}}/profiles/u1580486239
 Content-Type: application/json
 ###
 POST {{BASE_URL}}/articles

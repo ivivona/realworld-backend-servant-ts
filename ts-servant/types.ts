@@ -1,5 +1,5 @@
 import * as t from "io-ts";
-import { Tail, Push, Cast } from "../../type-ts";
+import { Tail, Push, Cast } from "type-ts";
 import { right } from "fp-ts/lib/Either";
 
 export type HttpMethod =
@@ -534,4 +534,18 @@ export function OPTIONS<T extends Capture<string, unknown>[]>(
   ...captures: NotRepeating<T, "identifier">
 ): BuildReqHeader<HasURLPath & HasHTTPMethod<"OPTIONS"> & HasCaptures<T>> {
   return build<T, "OPTIONS">("OPTIONS", fragments, captures);
+}
+
+export class ResponseWithHeaders<A, HS extends object> {
+  constructor(readonly response: A, readonly headers: HS) {}
+}
+
+export function withHeaders<A, HS extends object>(response: A, headers: HS) {
+  return new ResponseWithHeaders(response, headers);
+}
+
+export function isResponseWithHeaders<A, HS extends object>(
+  response: any
+): response is ResponseWithHeaders<A, HS> {
+  return response instanceof ResponseWithHeaders;
 }

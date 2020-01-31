@@ -8,11 +8,15 @@ import {
   EndpointDefinition,
   ReqHeader,
   MimeDecoder,
-  StatusCode
+  StatusCode,
+  ResponseWithHeaders
 } from "../ts-servant";
 import { Tail } from "type-ts";
 import * as express from "express";
-import { Capture } from "../ts-servant/types";
+import { Capture, isResponseWithHeaders, ResHeader } from "../ts-servant/types";
+import { fold, Either } from "fp-ts/lib/Either";
+import { pipe } from "fp-ts/lib/pipeable";
+import { identity } from "fp-ts/lib/function";
 
 type QueryMap<Q extends QueryParam<string, any>[]> = {
   "0": {};
@@ -25,7 +29,7 @@ type WithQueryParams<A> = A extends { queryParams: infer QP }
   : {};
 
 type HeaderMap<Q extends ReqHeader<string, any, any>[]> = {
-  "0": {};
+  "0": Record<string, never>;
   n: { [k in Q[0]["name"]]: Q[0]["_O"] } & HeaderMap<Tail<Q>>;
 }[Q extends [] ? "0" : "n"];
 type WithHeaders<A> = A extends { reqHeaders: infer HS }
@@ -33,6 +37,16 @@ type WithHeaders<A> = A extends { reqHeaders: infer HS }
     ? { headers: HeaderMap<HS> }
     : {}
   : {};
+type WithResHeaders<A> = A extends { resHeaders: infer HS }
+  ? HS extends ResHeader<string, any, any>[]
+    ? { resHeaders: HeaderMap<HS> }
+    : {}
+  : {};
+type ResHeaderMap<A> = A extends { resHeaders: infer HS }
+  ? HS extends ResHeader<string, any, any>[]
+    ? HeaderMap<HS>
+    : Record<string, never>
+  : Record<string, never>;
 
 type WithBody<A> = A extends { bodyDecoder: infer B }
   ? B extends MimeDecoder<any, infer O>
@@ -55,9 +69,19 @@ type ApiEndpoint = Partial<EndpointDefinition> &
   HasHTTPMethod<HttpMethod> &
   HasResponse<MimeEncoder<any, any>, StatusCode>;
 
+type HandlerResult<A extends ApiEndpoint> = A extends { resHeaders: infer HS }
+  ? HS extends ResHeader<string, any, any>[]
+    ? ResponseWithHeaders<A["resEncoder"]["_I"], ResHeaderMap<A>>
+    : A["resEncoder"]["_I"]
+  : A["resEncoder"]["_I"];
+
 type Handler<A extends ApiEndpoint> = (
-  ctx: WithCaptures<A> & WithQueryParams<A> & WithHeaders<A> & WithBody<A>
-) => Promise<A["resEncoder"]["_I"]> | A["resEncoder"]["_I"];
+  ctx: WithCaptures<A> &
+    WithQueryParams<A> &
+    WithHeaders<A> &
+    WithBody<A> &
+    WithResHeaders<A>
+) => Promise<HandlerResult<A>> | HandlerResult<A>;
 
 export function addToRouter<A extends ApiEndpoint>(
   api: A,
@@ -65,6 +89,14 @@ export function addToRouter<A extends ApiEndpoint>(
   router: express.Router
 ): express.Router {
   function exhaustiveCheck(_: never) {}
+  function getOrThrow<A>(either: Either<unknown, A>) {
+    return pipe(
+      either,
+      fold(e => {
+        throw e;
+      }, identity)
+    );
+  }
 
   const middleware = async function(
     req: express.Request,
@@ -75,61 +107,48 @@ export function addToRouter<A extends ApiEndpoint>(
       const ctx = ({
         captures: api.captures?.reduce((cs, c) => {
           const value = c.decoder(req.param(c.identifier));
-          switch (value._tag) {
-            case "Left":
-              throw value;
-            case "Right":
-              return {
-                ...cs,
-                [c.identifier]: value.right
-              };
-          }
+          return {
+            ...cs,
+            [c.identifier]: getOrThrow(value)
+          };
         }, {}),
         headers: api.reqHeaders?.reduce((hs, h) => {
           const value = h.decoder(req.header(h.name));
-          switch (value._tag) {
-            case "Left":
-              throw value;
-            case "Right":
-              return {
-                ...hs,
-                [h.name]: value.right
-              };
-          }
+          return {
+            ...hs,
+            [h.name]: getOrThrow(value)
+          };
         }, {}),
         query: api.queryParams?.reduce((qps, qp) => {
           const value = qp.decoder(req.query[qp.name]);
-          switch (value._tag) {
-            case "Left":
-              throw value;
-            case "Right":
-              return {
-                ...qps,
-                [qp.name]: value.right
-              };
-          }
+          return {
+            ...qps,
+            [qp.name]: getOrThrow(value)
+          };
         }, {}),
         body: (() => {
-          const b = api.bodyDecoder?.decoder(req.body);
-          if (b) {
-            switch (b._tag) {
-              case "Left":
-                throw b;
-              case "Right":
-                return b.right;
-            }
-          }
-          return undefined;
+          const value = api.bodyDecoder?.decoder(req.body);
+          return value ? getOrThrow(value) : undefined;
         })()
       } as any) as WithCaptures<A> &
         WithQueryParams<A> &
         WithHeaders<A> &
+        WithResHeaders<A> &
         WithBody<A>;
       const result = await handler(ctx);
       res.status(api.status);
       res.setHeader("Content-Type", api.resEncoder.contentType.mimeType);
-      const response = api.resEncoder.encoder(result);
-      res.send(response);
+      if (isResponseWithHeaders(result)) {
+        api.resHeaders?.forEach(h => {
+          const value = h.decoder(result.headers[h.name]);
+          res.setHeader(h.name, getOrThrow(value));
+        });
+        const response = api.resEncoder.encoder(result.response);
+        res.send(response);
+      } else {
+        const response = api.resEncoder.encoder(result);
+        res.send(response);
+      }
       next();
     } catch (e) {
       next(e);

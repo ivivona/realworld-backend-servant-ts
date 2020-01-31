@@ -22,7 +22,7 @@
     "newtype-ts": "^0.3.3",
     "pg-connection-string": "^2.1.0",
     "pg-ts": "github:ivivona/pg-ts#master",
-    "slug": "^2.1.0",
+    "slug": "^2.1.1",
     "type-ts": "^1.0.2",
     "validator": "^12.1.0"
   },

@@ -27,7 +27,7 @@ import {
 } from "./types";
 import { NonEmptyString } from "io-ts-types/lib/NonEmptyString";
 import { JWTTokenFromHeader } from "./jwt";
-import { Username, PositiveFromString } from "../types";
+import { Username, PositiveFromString, Slug } from "../types";
 
 function optional<A extends t.Mixed>(a: A): t.UnionC<[A, t.UndefinedC]> {
   return t.union([a, t.undefined]);
@@ -78,7 +78,7 @@ export const api = {
     .query("offset", optional(t.Int))
     .response(asJson(ArticlesRes)),
 
-  getArticle: GET`/articles/${capture("slug", NonEmptyString)}`
+  getArticle: GET`/articles/${capture("slug", Slug)}`
     .reqHeader("Authorization", optional(JWTTokenFromHeader))
     .response(asJson(ArticleRes)),
 
@@ -87,39 +87,36 @@ export const api = {
     .body(fromJson(ArticleReq))
     .response(asJson(ArticleRes), 201),
 
-  updateArticle: PUT`/articles/${capture("slug", NonEmptyString)}`
+  updateArticle: PUT`/articles/${capture("slug", Slug)}`
     .reqHeader("Authorization", JWTTokenFromHeader)
     .body(fromJson(ArticleUpdateReq))
     .response(asJson(ArticleRes), 202),
 
-  deleteArticle: DELETE`/articles/${capture("slug", NonEmptyString)}`
+  deleteArticle: DELETE`/articles/${capture("slug", Slug)}`
     .reqHeader("Authorization", JWTTokenFromHeader)
     .response(asJsonF(Empty), 201),
 
-  addComment: POST`/articles/${capture("slug", NonEmptyString)}/comments`
+  addComment: POST`/articles/${capture("slug", Slug)}/comments`
     .reqHeader("Authorization", JWTTokenFromHeader)
     .body(fromJson(CommentReq))
     .response(asJson(CommentRes), 201),
 
-  getComments: GET`/articles/${capture("slug", NonEmptyString)}/comments`
+  getComments: GET`/articles/${capture("slug", Slug)}/comments`
     .reqHeader("Authorization", optional(JWTTokenFromHeader))
     .response(asJson(CommentsRes)),
 
-  deleteComment: DELETE`/articles/${capture(
-    "slug",
-    NonEmptyString
-  )}/comments/${capture("id", PositiveFromString)}`
+  deleteComment: DELETE`/articles/${capture("slug", Slug)}/comments/${capture(
+    "id",
+    PositiveFromString
+  )}`
     .reqHeader("Authorization", JWTTokenFromHeader)
     .response(asJsonF(Empty), 201),
 
-  favoriteArticle: POST`/articles/${capture("slug", NonEmptyString)}/favorite`
+  favoriteArticle: POST`/articles/${capture("slug", Slug)}/favorite`
     .reqHeader("Authorization", JWTTokenFromHeader)
     .response(asJson(ArticleRes), 201),
 
-  unfavoriteArticle: DELETE`/articles/${capture(
-    "slug",
-    NonEmptyString
-  )}/favorite`
+  unfavoriteArticle: DELETE`/articles/${capture("slug", Slug)}/favorite`
     .reqHeader("Authorization", JWTTokenFromHeader)
     .response(asJson(ArticleRes), 201),
 

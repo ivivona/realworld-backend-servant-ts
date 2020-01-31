@@ -6,7 +6,8 @@ import {
   Email,
   Password,
   EncryptedPassword,
-  JWTToken
+  JWTToken,
+  Slug
 } from "../types";
 import { JWTTokenFromString } from "./jwt";
 
@@ -97,7 +98,7 @@ export type ProfileRes = t.TypeOf<typeof ProfileRes>;
 
 export const ArticleRes = t.strict({
   article: t.strict({
-    slug: NonEmptyString,
+    slug: Slug,
     title: NonEmptyString,
     description: NonEmptyString,
     body: NonEmptyString,
@@ -119,7 +120,7 @@ export type ArticleRes = t.TypeOf<typeof ArticleRes>;
 export const ArticlesRes = t.strict({
   articles: t.array(
     t.strict({
-      slug: NonEmptyString,
+      slug: Slug,
       title: NonEmptyString,
       description: NonEmptyString,
       body: NonEmptyString,
@@ -233,7 +234,7 @@ const JSDate = new t.Type(
 
 export const Article = t.strict({
   id: t.number,
-  slug: NonEmptyString,
+  slug: Slug,
   title: NonEmptyString,
   description: NonEmptyString,
   body: NonEmptyString,
@@ -273,7 +274,7 @@ export const CommentWithAuthor = t.strict({
 export type CommentWithAuthor = t.TypeOf<typeof CommentWithAuthor>;
 
 export const ArticleWithAuthor = t.strict({
-  slug: NonEmptyString,
+  slug: Slug,
   title: NonEmptyString,
   description: NonEmptyString,
   body: NonEmptyString,

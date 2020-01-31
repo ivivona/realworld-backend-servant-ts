@@ -6,10 +6,13 @@ export interface MaxStringBrand<M extends number> {
   readonly Max: M;
 }
 export const MaxString = <M extends number>(max: M) =>
-  brand(
-    string,
-    (s): s is Branded<string, MaxStringBrand<M>> => s.length <= max,
-    "MaxString"
+  withMessage(
+    brand(
+      string,
+      (s): s is Branded<string, MaxStringBrand<M>> => s.length <= max,
+      "MaxString"
+    ),
+    u => `Maximum length is ${max} for value "${u}"`
   );
 
 export interface MinStringBrand<M extends number> {

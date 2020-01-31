@@ -5,7 +5,7 @@ import { map } from "fp-ts/lib/Either";
 
 export interface Password
   extends Newtype<
-    { readonly Username: unique symbol },
+    { readonly Passwod: unique symbol },
     Min8String & Max512String
   > {}
 
