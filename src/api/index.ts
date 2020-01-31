@@ -66,8 +66,8 @@ export const api = {
   getArticles: GET`/articles`
     .reqHeader("Authorization", optional(JWTTokenFromHeader))
     .query("tag", optional(NonEmptyString))
-    .query("author", optional(NonEmptyString))
-    .query("favorited", optional(NonEmptyString))
+    .query("author", optional(Username))
+    .query("favorited", optional(Username))
     .query("limit", optional(t.Int))
     .query("offset", optional(t.Int))
     .response(asJson(ArticlesRes)),

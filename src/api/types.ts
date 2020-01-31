@@ -203,12 +203,24 @@ export function newJWTTokenFor(sub: Username): JWTToken {
 export const UserToJson = (u: User) => {
   return UserRes.encode({
     user: {
-      username: u.username,
-      email: u.email,
-      bio: u.bio,
-      image: u.image,
+      ...u,
       token: newJWTTokenFor(u.username)
     }
+  });
+};
+
+export const Profile = t.strict({
+  username: Username,
+  bio: t.string,
+  image: optional(t.string),
+  following: t.boolean
+});
+
+export type Profile = t.TypeOf<typeof Profile>;
+
+export const ProfileToJson = (profile: Profile) => {
+  return ProfileRes.encode({
+    profile
   });
 };
 

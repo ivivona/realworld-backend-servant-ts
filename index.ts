@@ -3,25 +3,17 @@ import { json } from "body-parser";
 import { PathReporter } from "io-ts/lib/PathReporter";
 import { createApi } from "./ts-servant-express";
 import { api } from "./src/api";
-import {
-  compareWithAsync,
-  encryptAsync,
-  Username,
-  JWTToken
-} from "./src/types";
+import { compareWithAsync, encryptAsync, Username } from "./src/types";
 import {
   User,
-  Article,
-  Comment,
   CommentWithAuthor,
-  ArticleWithAuthor
+  ArticleWithAuthor,
+  Profile
 } from "./src/api/types";
 import { queries, isDuplicatedKeyError } from "./src/db";
 import { SQL, SQLFragment } from "../pg-ts/dist";
 import { TokenExpiredError } from "jsonwebtoken";
-import { strict, literal, union, identity, Int } from "io-ts";
-import { fold } from "fp-ts/lib/Option";
-import { pipe } from "fp-ts/lib/pipeable";
+import { strict, Int } from "io-ts";
 import { NonEmptyString } from "io-ts-types/lib/NonEmptyString";
 
 class ApiError extends Error {
@@ -30,114 +22,91 @@ class ApiError extends Error {
   }
 }
 
-const zero = 0 as Int;
+function userNamed(username: Username): ReturnType<typeof SQLFragment> {
+  return SQLFragment`SELECT * FROM users WHERE username = ${username}`;
+}
+function idFrom(
+  table: string | ReturnType<typeof SQLFragment>
+): ReturnType<typeof SQLFragment> {
+  return SQLFragment`SELECT id FROM (${table}) AS _ID_LOOKUP_`;
+}
 const nothing = SQLFragment``;
 
 queries("postgresql://localhost/real-ts")
-  .then(({ queryAny, queryOne, queryOneOrNone, queryNone }) => {
-    async function findUserByUsername(username: Username) {
-      const candidate = await queryOneOrNone(
-        User,
-        SQL`SELECT * FROM users WHERE username = ${username}`
-      );
-      return pipe(
-        candidate,
-        fold(() => {
-          throw new ApiError("User not found", 401);
-        }, identity)
-      );
-    }
-
-    type HasAuth = { headers: { Authorization: JWTToken } };
-
-    async function currentUser(ctx: HasAuth) {
-      const {
-        headers: {
-          Authorization: { sub: username }
-        }
-      } = ctx;
-      return findUserByUsername(username);
-    }
-
-    async function isFollowing(follower: User, followed: User) {
-      const { count } = await queryOne(
-        strict({ count: union([literal(1), literal(0)]) }),
-        SQL`SELECT COUNT(*)::integer FROM follows WHERE follower_id = ${follower.id} AND followed_id = ${followed.id}`
-      );
-      return count === 1;
-    }
-
-    async function hasFavorited(user: User, article: Article) {
-      const { count } = await queryOne(
-        strict({ count: union([literal(1), literal(0)]) }),
-        SQL`SELECT COUNT(*)::integer FROM favorites WHERE user_id = ${user.id} AND article_id = ${article.id}`
-      );
-      return count === 1;
-    }
-
+  .then(({ queryAny, queryOne, queryNone }) => {
     const app = express();
     app.use(json());
     app.use(
       "/api",
       createApi(api, {
-        createUser: async _ => {
-          const {
-            user: { password, ...noPassword }
-          } = _.body;
-          const hashed = await encryptAsync(password, 10);
-          const user = {
-            ...noPassword,
-            password: hashed,
-            bio: "",
-            image: null
-          };
+        createUser: async ({
+          body: {
+            user: { email, username, password }
+          }
+        }) => {
           const saved = await queryOne(
             User,
-            SQL`INSERT INTO users (username, email, password, bio, image) VALUES (${user.username}, ${user.email}, ${user.password}, ${user.bio}, ${user.image}) RETURNING *`
+            SQL`INSERT INTO users (username, email, password, bio, image) 
+                VALUES (${username}, ${email}, ${await encryptAsync(
+              password,
+              10
+            )}, ${""}, ${null}) 
+                RETURNING *`
           );
           return saved;
         },
-        login: async _ => {
-          const {
+        login: async ({
+          body: {
             user: { password, email }
-          } = _.body;
+          }
+        }) => {
           const candidate = await queryOne(
             User,
             SQL`SELECT * FROM users WHERE email = ${email}`
           );
-          if (
-            !candidate ||
-            !(await compareWithAsync(candidate.password, password))
-          ) {
-            throw new ApiError("User nor found", 401);
+          if (!(await compareWithAsync(candidate.password, password))) {
+            throw new ApiError("User not found", 401);
           }
           return candidate;
         },
-        getCurrentUser: currentUser,
-        updateCurrentUser: async _ => {
-          const {
-            body: { user: updates }
-          } = _;
-          const candidate = await currentUser(_);
-          const user = { ...candidate };
-          if (updates.username) {
-            user.username = updates.username;
+        getCurrentUser: async ({
+          headers: {
+            Authorization: { sub }
           }
-          if (updates.bio !== undefined && updates.bio !== null) {
-            user.bio = updates.bio;
+        }) => {
+          const candidate = await queryOne(User, SQL`${userNamed(sub)}`);
+          return candidate;
+        },
+        updateCurrentUser: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          body: {
+            user: { username, bio, image, email, password }
           }
-          if (updates.image !== undefined) {
-            user.image = updates.image;
-          }
-          if (updates.email) {
-            user.email = updates.email;
-          }
-          if (updates.password) {
-            user.password = await encryptAsync(updates.password, 10);
-          }
+        }) => {
           const saved = await queryOne(
             User,
-            SQL`UPDATE users SET username = ${user.username}, email = ${user.email}, bio = ${user.bio}, image = ${user.image} WHERE id = ${user.id} RETURNING *`
+            SQL`UPDATE users 
+                SET 
+                  ${[
+                    username ? SQLFragment`username = ${username}` : null,
+                    email ? SQLFragment`email = ${email}` : null,
+                    bio ? SQLFragment`bio = ${bio}` : null,
+                    image ? SQLFragment`email = ${image}` : null,
+                    password
+                      ? SQLFragment`password = ${await encryptAsync(
+                          password,
+                          10
+                        )}`
+                      : null
+                  ]
+                    .filter(_ => _ !== null)
+                    .reduce((acc, frag) =>
+                      frag ? SQLFragment`${acc}, ${frag}` : acc
+                    ) || nothing}
+                WHERE username = ${sub}
+                RETURNING *`
           );
           return saved;
         },
@@ -146,45 +115,79 @@ queries("postgresql://localhost/real-ts")
             headers: { Authorization },
             captures: { username: lookup }
           } = _;
-          let following = false;
-
-          const candidate = await findUserByUsername(lookup);
-          const { username, bio, email, image } = candidate;
-
-          if (Authorization?.sub) {
-            const me = await findUserByUsername(Authorization.sub);
-            following = await isFollowing(me, candidate);
-          }
-
-          return {
-            profile: { username, bio, email, image, following }
-          };
-        },
-        followUser: async _ => {
-          const {
-            captures: { username }
-          } = _;
-          const me = await currentUser(_);
-          const followed = await findUserByUsername(username);
-          await queryNone(
-            SQL`INSERT INTO follows (follower_id, followed_id) VALUES (${me.id}, ${followed.id}) ON CONFLICT DO NOTHING`
+          const profile = await queryOne(
+            Profile,
+            SQL`
+            SELECT 
+              users.*,
+              ${
+                Authorization?.sub
+                  ? SQLFragment`f.follower_id IS NOT NULL`
+                  : SQLFragment`FALSE`
+              } AS following
+            FROM users
+            ${
+              Authorization?.sub
+                ? SQLFragment`
+                  LEFT JOIN follows f 
+                    ON  f.followed_id = users.id AND 
+                        f.follower_id = (${idFrom(
+                          userNamed(Authorization.sub)
+                        )})`
+                : nothing
+            }
+            WHERE username = ${lookup}`
           );
-          return {
-            profile: { ...followed, following: true }
-          };
+          return { profile };
         },
-        unfollowUser: async _ => {
-          const {
-            captures: { username }
-          } = _;
-          const me = await currentUser(_);
-          const followed = await findUserByUsername(username);
-          await queryNone(
-            SQL`DELETE FROM follows WHERE follower_id = ${me.id} AND followed_id = ${followed.id}`
+        followUser: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { username }
+        }) => {
+          const profile = await queryOne(
+            Profile,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                followed AS (${userNamed(username)}),
+                follow AS (
+                  INSERT INTO follows (follower_id, followed_id) 
+                  VALUES ((SELECT id FROM me), (SELECT id FROM followed)) 
+                  ON CONFLICT DO NOTHING
+                  RETURNING *
+                )
+              SELECT followed.*, TRUE AS following
+              FROM followed
+              CROSS JOIN me`
           );
-          return {
-            profile: { ...followed, following: false }
-          };
+          return { profile };
+        },
+        unfollowUser: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { username }
+        }) => {
+          const profile = await queryOne(
+            Profile,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                followed AS (${userNamed(username)}),
+                follow AS (
+                  DELETE FROM follows 
+                  WHERE 
+                    follower_id = (SELECT id FROM me) AND 
+                    followed_id = (SELECT id FROM followed)
+                  RETURNING *
+                )
+              SELECT followed.*, FALSE AS following
+              FROM followed
+              CROSS JOIN me`
+          );
+          return { profile };
         },
         getArticles: async _ => {
           const {
@@ -212,7 +215,7 @@ queries("postgresql://localhost/real-ts")
               favorited
                 ? SQLFragment`
               LEFT JOIN 
-                favorites as f ON f.user_id = (SELECT id FROM users WHERE username = ${favorited})`
+                favorites as f ON f.user_id = (${idFrom(userNamed(favorited))})`
                 : nothing
             }
             LEFT JOIN users ON "authorId" = users.id
@@ -220,7 +223,9 @@ queries("postgresql://localhost/real-ts")
               Authorization?.sub
                 ? SQLFragment`
               LEFT JOIN 
-                favorites ON favorites.user_id = (SELECT id FROM users WHERE username = ${Authorization.sub}) AND
+                favorites ON favorites.user_id = (${idFrom(
+                  userNamed(Authorization.sub)
+                )}) AND
                 favorites.article_id = articles.id`
                 : nothing
             }
@@ -228,14 +233,16 @@ queries("postgresql://localhost/real-ts")
               Authorization?.sub
                 ? SQLFragment`
               LEFT JOIN 
-                follows ON follows.follower_id = (SELECT id FROM users WHERE username = ${Authorization.sub}) AND
+                follows ON follows.follower_id = (${idFrom(
+                  userNamed(Authorization.sub)
+                )}) AND
                 follows.followed_id = users.id`
                 : nothing
             }
             WHERE
             ${
               author
-                ? SQLFragment`"authorId" = (SELECT id FROM users WHERE username = ${author})`
+                ? SQLFragment`"authorId" = (${idFrom(userNamed(author))})`
                 : SQLFragment`1 = 1`
             } AND
             ${
@@ -272,11 +279,11 @@ queries("postgresql://localhost/real-ts")
               row_to_json((SELECT u FROM (SELECT users.*, follows.followed_id IS NOT NULL AS following) AS u)) AS author
             FROM articles 
             INNER JOIN 
-              favorites ON favorites.user_id = (SELECT id FROM users WHERE username = ${sub}) AND
+              favorites ON favorites.user_id = (${idFrom(userNamed(sub))}) AND
               favorites.article_id = articles.id
             LEFT JOIN users ON "authorId" = users.id
             LEFT JOIN 
-              follows ON follows.follower_id = (SELECT id FROM users WHERE username = ${sub}) AND
+              follows ON follows.follower_id = (${idFrom(userNamed(sub))}) AND
               follows.followed_id = users.id
             ORDER BY articles."createdAt" DESC
             LIMIT ${limit ?? 20} OFFSET ${offset ?? 0}
@@ -297,135 +304,188 @@ queries("postgresql://localhost/real-ts")
             ).count
           };
         },
-        getArticle: async _ => {
-          const {
-            headers: { Authorization },
-            captures: { slug }
-          } = _;
+        getArticle: async ({
+          headers: { Authorization },
+          captures: { slug }
+        }) => {
           const article = await queryOne(
-            Article,
-            SQL`SELECT * FROM articles WHERE slug = ${slug}`
+            ArticleWithAuthor,
+            SQL`
+            SELECT
+              articles.*, 
+              ${
+                Authorization?.sub
+                  ? SQLFragment`favorites.article_id IS NOT NULL`
+                  : SQLFragment`FALSE`
+              } AS favorited,
+              (SELECT COUNT(*)::integer FROM favorites WHERE favorites.article_id = articles.id) AS "favoritesCount",
+              row_to_json((SELECT u FROM (SELECT users.*, ${
+                Authorization?.sub
+                  ? SQLFragment`follows.followed_id IS NOT NULL`
+                  : SQLFragment`FALSE`
+              } AS following) AS u)) AS author
+            FROM articles 
+            LEFT JOIN users ON "authorId" = users.id
+            ${
+              Authorization?.sub
+                ? SQLFragment`
+              LEFT JOIN 
+                favorites ON favorites.user_id = (SELECT id FROM users WHERE username = ${Authorization.sub}) AND
+                favorites.article_id = articles.id`
+                : nothing
+            }
+            ${
+              Authorization?.sub
+                ? SQLFragment`
+              LEFT JOIN 
+                follows ON follows.follower_id = (SELECT id FROM users WHERE username = ${Authorization.sub}) AND
+                follows.followed_id = users.id`
+                : nothing
+            }
+            WHERE slug = lower(${slug})
+          `
           );
-          const author = await queryOne(
-            User,
-            SQL`SELECT * FROM users WHERE id = ${article.authorId}`
-          );
-          const favoritesCount = (
-            await queryOne(
-              strict({ count: Int }),
-              SQL`SELECT COUNT(*)::integer FROM favorites WHERE article_id = ${article.id}`
-            )
-          ).count;
-          let favorited = false;
-          let following = false;
-          if (Authorization?.sub) {
-            const me = await findUserByUsername(Authorization.sub);
-            favorited = await hasFavorited(me, article);
-            following = await isFollowing(me, author);
+          return { article };
+        },
+        createArticle: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          body: {
+            article: { title, description, body, tagList }
           }
-          return {
-            article: {
-              ...article,
-              author: { ...author, following },
-              favorited,
-              favoritesCount
-            }
-          };
-        },
-        createArticle: async _ => {
-          const {
-            body: { article }
-          } = _;
-          const me = await currentUser(_);
-          const saved = await queryOne(
-            Article,
-            SQL`INSERT INTO articles (title, description, body, "tagList", "authorId") VALUES (${
-              article.title
-            }, ${article.description}, ${article.body}, ${article.tagList ??
-              []}, ${me.id}) RETURNING *`
+        }) => {
+          const article = await queryOne(
+            ArticleWithAuthor,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                article AS (INSERT INTO articles (title, description, body, "tagList", "authorId") VALUES (
+                  ${title}, 
+                  ${description}, 
+                  ${body}, 
+                  ${tagList ?? []}, 
+                  (SELECT id FROM me)
+                ) RETURNING *)
+                SELECT
+                  article.*, 
+                  FALSE AS favorited,
+                  0 AS "favoritesCount",
+                  row_to_json((SELECT u FROM (SELECT me.*, follows.followed_id IS NOT NULL AS following) AS u)) AS author
+                FROM me
+                CROSS JOIN article
+                LEFT JOIN 
+                  follows ON follows.follower_id = me.id AND
+                  follows.followed_id = me.id
+                WHERE
+                  me.id IS NOT NULL`
           );
-          const following = await isFollowing(me, me);
-          return {
-            article: {
-              ...saved,
-              author: { ...me, following },
-              favorited: false,
-              favoritesCount: zero
-            }
-          };
+          return { article };
         },
-        updateArticle: async _ => {
-          const {
-            captures: { slug },
-            body: { article }
-          } = _;
-          const me = await currentUser(_);
-          const old = await queryOne(
-            Article,
-            SQL`SELECT * FROM articles WHERE slug = lower(${slug})`
+        updateArticle: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { slug },
+          body: {
+            article: { title, description, body }
+          }
+        }) => {
+          const article = await queryOne(
+            ArticleWithAuthor,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                article AS (UPDATE articles SET 
+                  ${[
+                    title ? SQLFragment`title = ${title}` : null,
+                    description
+                      ? SQLFragment`description = ${description}`
+                      : null,
+                    body ? SQLFragment`body = ${body}` : null
+                  ]
+                    .filter(_ => _ !== null)
+                    .reduce((acc, frag) =>
+                      frag ? SQLFragment`${acc}, ${frag}` : acc
+                    ) || nothing}
+                  WHERE slug = lower(${slug}) RETURNING *)
+              SELECT
+                article.*, 
+                (SELECT article_id FROM favorites WHERE favorites.article_id = article.id AND favorites.user_id = me.id) IS NOT NULL AS favorited,
+                (SELECT COUNT(*)::integer FROM favorites WHERE favorites.article_id = article.id) AS "favoritesCount",
+                row_to_json(
+                  (SELECT u FROM (SELECT 
+                    me.*, 
+                    (SELECT followed_id 
+                      FROM follows 
+                      WHERE follows.follower_id = me.id AND follows.followed_id = me.id
+                    ) IS NOT NULL AS following
+                  ) AS u)
+                ) AS author
+              FROM article
+              CROSS JOIN me`
           );
-          const saved = await queryOne(
-            Article,
-            SQL`UPDATE articles SET title = ${article.title ||
-              old.title}, description = ${article.description ||
-              old.description}, body = ${article.body || old.body} WHERE id = ${
-              old.id
-            } RETURNING *`
-          );
-          const following = await isFollowing(me, me);
-          const favoritesCount = (
-            await queryOne(
-              strict({ count: Int }),
-              SQL`SELECT COUNT(*)::integer FROM favorites WHERE article_id = ${saved.id}`
-            )
-          ).count;
-          const favorited = await hasFavorited(me, saved);
-          return {
-            article: {
-              ...saved,
-              author: { ...me, following },
-              favorited,
-              favoritesCount
-            }
-          };
+          return { article };
         },
-        deleteArticle: async _ => {
-          const {
-            captures: { slug }
-          } = _;
-          const me = await currentUser(_);
+        deleteArticle: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { slug }
+        }) => {
           await queryNone(SQL`BEGIN`);
           await queryNone(
-            SQL`DELETE FROM favorites WHERE article_id = (SELECT id FROM articles WHERE slug = lower(${slug}) AND "authorId" = ${me.id})`
+            SQL`DELETE FROM favorites WHERE article_id = (SELECT id FROM articles WHERE slug = lower(${slug}) AND "authorId" = (SELECT id FROM users WHERE username = ${sub}))`
           );
           await queryNone(
-            SQL`DELETE FROM comments WHERE "articleId" = (SELECT id FROM articles WHERE slug = lower(${slug}) AND "authorId" = ${me.id})`
+            SQL`DELETE FROM comments WHERE "articleId" = (SELECT id FROM articles WHERE slug = lower(${slug}) AND "authorId" = (SELECT id FROM users WHERE username = ${sub}))`
           );
           await queryNone(
-            SQL`DELETE FROM articles WHERE slug = lower(${slug}) AND "authorId" = ${me.id}`
+            SQL`DELETE FROM articles WHERE slug = lower(${slug}) AND "authorId" = (SELECT id FROM users WHERE username = ${sub})`
           );
           await queryNone(SQL`COMMIT`);
         },
-        addComment: async _ => {
-          const {
-            captures: { slug },
-            body: { comment }
-          } = _;
-          const me = await currentUser(_);
-          const saved = await queryOne(
-            Comment,
-            SQL`INSERT INTO comments ("authorId", "articleId", body) VALUES (${me.id}, (SELECT id FROM articles WHERE slug = lower(${slug}) LIMIT 1), ${comment.body}) RETURNING *`
+        addComment: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { slug },
+          body: {
+            comment: { body }
+          }
+        }) => {
+          const comment = await queryOne(
+            CommentWithAuthor,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                article AS (SELECT * FROM articles WHERE slug = lower(${slug})),
+                comment AS (
+                  INSERT INTO comments ("authorId", "articleId", body) 
+                  VALUES ((SELECT id FROM me), (SELECT id FROM article), ${body}) 
+                  RETURNING *
+                )
+              SELECT 
+                comment.*, 
+                row_to_json(
+                  (SELECT u FROM (SELECT 
+                    me.*, 
+                    (SELECT followed_id 
+                      FROM follows 
+                      WHERE follows.follower_id = me.id AND follows.followed_id = article."authorId"
+                    ) IS NOT NULL AS following
+                  ) AS u)
+                ) AS author
+              FROM comment
+              CROSS JOIN me
+              CROSS JOIN article`
           );
-          const following = await isFollowing(me, me);
-          return {
-            comment: { ...saved, author: { ...me, following } }
-          };
+          return { comment };
         },
-        getComments: async _ => {
-          const {
-            headers: { Authorization },
-            captures: { slug }
-          } = _;
+        getComments: async ({
+          headers: { Authorization },
+          captures: { slug }
+        }) => {
           const comments = await queryAny(
             CommentWithAuthor,
             SQL`
@@ -442,7 +502,9 @@ queries("postgresql://localhost/real-ts")
               Authorization?.sub
                 ? SQLFragment`
               LEFT JOIN 
-                follows ON follows.follower_id = (SELECT id FROM users WHERE username = ${Authorization.sub}) AND
+                follows ON follows.follower_id = (${idFrom(
+                  userNamed(Authorization.sub)
+                )}) AND
                 follows.followed_id = users.id`
                 : nothing
             }
@@ -450,84 +512,98 @@ queries("postgresql://localhost/real-ts")
           );
           return { comments };
         },
-        deleteComment: async _ => {
-          const {
-            captures: { slug, id }
-          } = _;
-          const me = await currentUser(_);
+        deleteComment: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { slug, id }
+        }) => {
           await queryNone(
-            SQL`DELETE FROM comments WHERE "articleId" = (SELECT id FROM articles WHERE slug = lower(${slug})) AND "authorId" = ${me.id} AND id = ${id}`
+            SQL`
+            DELETE FROM comments 
+            WHERE 
+              "articleId" = (SELECT id FROM articles WHERE slug = lower(${slug})) AND 
+              "authorId" = (${idFrom(userNamed(sub))}) AND 
+              id = ${id}`
           );
         },
-        favoriteArticle: async _ => {
-          const {
-            captures: { slug }
-          } = _;
-          const me = await currentUser(_);
-          await queryNone(
-            SQL`INSERT INTO favorites (user_id, article_id) VALUES (${me.id}, (SELECT id FROM articles WHERE slug = lower(${slug}))) ON CONFLICT DO NOTHING`
-          );
+        favoriteArticle: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { slug }
+        }) => {
           const article = await queryOne(
-            Article,
-            SQL`SELECT * FROM articles WHERE slug = lower(${slug})`
+            ArticleWithAuthor,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                article AS (SELECT * FROM articles WHERE slug = lower(${slug})),
+                favorite AS (
+                  INSERT INTO favorites (user_id, article_id) 
+                  VALUES ((SELECT id FROM me), (SELECT id FROM article)) 
+                  ON CONFLICT DO NOTHING
+                  RETURNING *
+                )
+              SELECT
+                article.*, 
+                TRUE AS favorited,
+                (SELECT COUNT(*)::integer FROM favorites WHERE favorites.article_id = article.id) + 1 AS "favoritesCount",
+                row_to_json(
+                  (SELECT u FROM (SELECT 
+                    me.*, 
+                    (SELECT followed_id 
+                      FROM follows 
+                      WHERE follows.follower_id = me.id AND follows.followed_id = me.id
+                    ) IS NOT NULL AS following
+                  ) AS u)
+                ) AS author
+              FROM article
+              CROSS JOIN me`
           );
-          const author = await queryOne(
-            User,
-            SQL`SELECT * FROM users WHERE id = ${article.authorId}`
-          );
-          const favoritesCount = (
-            await queryOne(
-              strict({ count: Int }),
-              SQL`SELECT COUNT(*)::integer FROM favorites WHERE article_id = ${article.id}`
-            )
-          ).count;
-          const favorited = await hasFavorited(me, article);
-          const following = await isFollowing(me, author);
-          return {
-            article: {
-              ...article,
-              author: { ...author, following },
-              favorited,
-              favoritesCount
-            }
-          };
+          return { article };
         },
-        unfavoriteArticle: async _ => {
-          const {
-            captures: { slug }
-          } = _;
-          const me = await currentUser(_);
+        unfavoriteArticle: async ({
+          headers: {
+            Authorization: { sub }
+          },
+          captures: { slug }
+        }) => {
           const article = await queryOne(
-            Article,
-            SQL`SELECT * FROM articles WHERE slug = lower(${slug})`
+            ArticleWithAuthor,
+            SQL`
+              WITH 
+                me AS (${userNamed(sub)}),
+                article AS (SELECT * FROM articles WHERE slug = lower(${slug})),
+                favorite AS (
+                  DELETE FROM favorites 
+                  WHERE user_id = (SELECT id FROM me) AND article_id = (SELECT id FROM article)
+                  RETURNING *
+                )
+              SELECT
+                article.*, 
+                FALSE AS favorited,
+                (SELECT COUNT(*)::integer FROM favorites WHERE favorites.article_id = article.id) - 1 AS "favoritesCount",
+                row_to_json(
+                  (SELECT u FROM (SELECT 
+                    me.*, 
+                    (SELECT followed_id 
+                      FROM follows 
+                      WHERE follows.follower_id = me.id AND follows.followed_id = me.id
+                    ) IS NOT NULL AS following
+                  ) AS u)
+                ) AS author
+              FROM article
+              CROSS JOIN me`
           );
-          const author = await queryOne(
-            User,
-            SQL`SELECT * FROM users WHERE id = ${article.authorId}`
-          );
-          const following = await isFollowing(me, author);
-          await queryNone(
-            SQL`DELETE FROM favorites WHERE user_id = ${me.id} AND article_id = (SELECT id FROM articles WHERE slug = lower(${slug}))`
-          );
-          const favoritesCount = (
-            await queryOne(
-              strict({ count: Int }),
-              SQL`SELECT COUNT(*)::integer FROM favorites WHERE article_id = ${article.id}`
-            )
-          ).count;
-          const favorited = await hasFavorited(me, article);
-          return {
-            article: {
-              ...article,
-              author: { ...author, following },
-              favorited,
-              favoritesCount
-            }
-          };
+          return { article };
         },
         getTags: async _ => {
           const tags = (
-            await queryAny(strict({ tag: NonEmptyString }), SQL``)
+            await queryAny(
+              strict({ tag: NonEmptyString }),
+              SQL`SELECT tag FROM tags`
+            )
           ).map(_ => _.tag);
           return { tags };
         }

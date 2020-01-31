@@ -99,3 +99,5 @@ GET http://localhost:3000/api/articles/how-to-train-your-dragon-16/comments
 GET http://localhost:3000/api/articles
 ###
 GET http://localhost:3000/api/articles?tag=dragons
+###
+GET http://localhost:3000/api/tags

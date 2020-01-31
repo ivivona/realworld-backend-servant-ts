@@ -330,7 +330,7 @@ export function reqHeader<
   I extends HeaderValue = string,
   O = I
 >(name: F, decoder?: Type<O, unknown, I>) {
-  return { name, decoder: decoder?.decode ?? (_ => _) };
+  return { name, decoder: decoder?.decode ?? identity().decode };
 }
 
 export function resHeader<
@@ -347,5 +347,5 @@ export function resHeader<
   I = string,
   O extends HeaderValue = string
 >(name: F, decoder?: Type<I, O, unknown>) {
-  return { name, decoder: decoder?.decode ?? (_ => _) };
+  return { name, decoder: decoder?.decode ?? identity().decode };
 }
