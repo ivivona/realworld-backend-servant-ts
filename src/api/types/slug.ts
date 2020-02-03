@@ -1,12 +1,4 @@
-import {
-  Type,
-  TypeOf,
-  identity,
-  intersection,
-  success,
-  Branded,
-  Context
-} from "io-ts/lib";
+import { Type, TypeOf, identity, success, Branded, Context } from "io-ts/lib";
 import { NonEmptyString } from "io-ts-types/lib/NonEmptyString";
 import * as slug from "slug";
 

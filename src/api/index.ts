@@ -1,5 +1,5 @@
-import { Empty } from "../../ts-servant";
-import { asJson as asJsonF } from "../../ts-servant/codecs";
+import { Empty } from "servant-ts/dist/core";
+import { asJson as asJsonF } from "servant-ts/dist/codecs";
 import {
   POST,
   GET,
@@ -8,8 +8,15 @@ import {
   asJson,
   fromJson,
   capture
-} from "../../ts-servant-io-ts";
-import * as t from "io-ts";
+} from "servant-ts/dist/io-ts";
+import {
+  UnionC,
+  Mixed,
+  UndefinedC,
+  Int,
+  union,
+  undefined as undefinedC
+} from "io-ts";
 import {
   UserReq,
   LoginReq,
@@ -27,10 +34,10 @@ import {
 } from "./types";
 import { NonEmptyString } from "io-ts-types/lib/NonEmptyString";
 import { JWTTokenFromHeader } from "./jwt";
-import { Username, PositiveFromString, Slug } from "../types";
+import { Username, PositiveFromString, Slug } from "./types";
 
-function optional<A extends t.Mixed>(a: A): t.UnionC<[A, t.UndefinedC]> {
-  return t.union([a, t.undefined]);
+function optional<A extends Mixed>(a: A): UnionC<[A, UndefinedC]> {
+  return union([a, undefinedC]);
 }
 
 export const api = {
@@ -68,14 +75,14 @@ export const api = {
     .query("tag", optional(NonEmptyString))
     .query("author", optional(Username))
     .query("favorited", optional(Username))
-    .query("limit", optional(t.Int))
-    .query("offset", optional(t.Int))
+    .query("limit", optional(Int))
+    .query("offset", optional(Int))
     .response(asJson(ArticlesRes)),
 
   feedArticles: GET`/articles/feed`
     .reqHeader("Authorization", JWTTokenFromHeader)
-    .query("limit", optional(t.Int))
-    .query("offset", optional(t.Int))
+    .query("limit", optional(Int))
+    .query("offset", optional(Int))
     .response(asJson(ArticlesRes)),
 
   getArticle: GET`/articles/${capture("slug", Slug)}`

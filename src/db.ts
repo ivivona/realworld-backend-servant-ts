@@ -5,8 +5,7 @@ import {
   camelCasedQueries,
   isDriverQueryError,
   ConnectedEnvironment
-} from "../../pg-ts";
-import {} from "../../pg-ts";
+} from "pg-ts-v2";
 import { fail } from "assert";
 import { Type } from "io-ts";
 import { QueryConfig } from "pg";

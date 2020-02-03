@@ -4,7 +4,6 @@ import { hash, compare } from "bcrypt";
 import { TaskEither, tryCatch } from "fp-ts/lib/TaskEither";
 import { fromNewtype } from "io-ts-types/lib/fromNewtype";
 import { Type, string } from "io-ts";
-import { either } from "fp-ts/lib/Either";
 
 export interface EncryptedPassword
   extends Newtype<{ readonly EncryptedPassword: unique symbol }, string> {}

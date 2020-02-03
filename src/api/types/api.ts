@@ -8,8 +8,8 @@ import {
   EncryptedPassword,
   JWTToken,
   Slug
-} from "../types";
-import { JWTTokenFromString } from "./jwt";
+} from ".";
+import { JWTTokenFromString } from "../jwt";
 
 export const optional = <C extends t.Mixed>(c: C) => t.union([c, t.null]);
 
@@ -96,82 +96,55 @@ export const ProfileRes = t.strict({
 });
 export type ProfileRes = t.TypeOf<typeof ProfileRes>;
 
-export const ArticleRes = t.strict({
-  article: t.strict({
-    slug: Slug,
-    title: NonEmptyString,
-    description: NonEmptyString,
-    body: NonEmptyString,
-    tagList: t.array(NonEmptyString),
-    createdAt: DateFromISOString,
-    updatedAt: DateFromISOString,
-    favorited: t.boolean,
-    favoritesCount: t.Int,
-    author: t.strict({
-      username: Username,
-      bio: t.string,
-      image: optional(t.string),
-      following: t.boolean
-    })
+const ArticleBase = t.strict({
+  slug: Slug,
+  title: NonEmptyString,
+  description: NonEmptyString,
+  body: NonEmptyString,
+  tagList: t.array(NonEmptyString),
+  createdAt: DateFromISOString,
+  updatedAt: DateFromISOString,
+  favorited: t.boolean,
+  favoritesCount: t.Int,
+  author: t.strict({
+    username: Username,
+    bio: t.string,
+    image: optional(t.string),
+    following: t.boolean
   })
+});
+
+export const ArticleRes = t.strict({
+  article: ArticleBase
 });
 export type ArticleRes = t.TypeOf<typeof ArticleRes>;
 
 export const ArticlesRes = t.strict({
-  articles: t.array(
-    t.strict({
-      slug: Slug,
-      title: NonEmptyString,
-      description: NonEmptyString,
-      body: NonEmptyString,
-      tagList: t.array(NonEmptyString),
-      createdAt: DateFromISOString,
-      updatedAt: DateFromISOString,
-      favorited: t.boolean,
-      favoritesCount: t.Int,
-      author: t.strict({
-        username: Username,
-        bio: t.string,
-        image: optional(t.string),
-        following: t.boolean
-      })
-    })
-  ),
+  articles: t.array(ArticleBase),
   articlesCount: t.Int
 });
 export type ArticlesRes = t.TypeOf<typeof ArticlesRes>;
 
-export const CommentRes = t.strict({
-  comment: t.strict({
-    id: t.Int,
-    createdAt: DateFromISOString,
-    updatedAt: DateFromISOString,
-    body: NonEmptyString,
-    author: t.strict({
-      username: Username,
-      bio: t.string,
-      image: optional(t.string),
-      following: t.boolean
-    })
+const CommentBase = t.strict({
+  id: t.Int,
+  createdAt: DateFromISOString,
+  updatedAt: DateFromISOString,
+  body: NonEmptyString,
+  author: t.strict({
+    username: Username,
+    bio: t.string,
+    image: optional(t.string),
+    following: t.boolean
   })
+});
+
+export const CommentRes = t.strict({
+  comment: CommentBase
 });
 export type CommentRes = t.TypeOf<typeof CommentRes>;
 
 export const CommentsRes = t.strict({
-  comments: t.array(
-    t.strict({
-      id: t.Int,
-      createdAt: DateFromISOString,
-      updatedAt: DateFromISOString,
-      body: NonEmptyString,
-      author: t.strict({
-        username: Username,
-        bio: t.string,
-        image: optional(t.string),
-        following: t.boolean
-      })
-    })
-  )
+  comments: t.array(CommentBase)
 });
 export type CommentsRes = t.TypeOf<typeof CommentsRes>;
 
@@ -193,7 +166,7 @@ export type User = t.TypeOf<typeof User>;
 
 export function newJWTTokenFor(sub: Username): JWTToken {
   const token = {
-    iss: "REALWORD-TS",
+    iss: process.env.JWT_ISS ?? "REALWORD-TS",
     sub,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 60 * 20
@@ -219,43 +192,12 @@ export const Profile = t.strict({
 
 export type Profile = t.TypeOf<typeof Profile>;
 
-export const ProfileToJson = (profile: Profile) => {
-  return ProfileRes.encode({
-    profile
-  });
-};
-
 const JSDate = new t.Type(
   "Date",
   (u): u is Date => u instanceof Date,
   (u, c) => (u instanceof Date ? t.success(u) : t.failure(u, c)),
   t.identity
 );
-
-export const Article = t.strict({
-  id: t.number,
-  slug: Slug,
-  title: NonEmptyString,
-  description: NonEmptyString,
-  body: NonEmptyString,
-  tagList: t.array(NonEmptyString),
-  createdAt: JSDate,
-  updatedAt: JSDate,
-  authorId: t.number
-});
-
-export type Article = t.TypeOf<typeof Article>;
-
-export const Comment = t.strict({
-  id: t.Int,
-  body: NonEmptyString,
-  createdAt: JSDate,
-  updatedAt: JSDate,
-  authorId: t.number,
-  articleId: t.number
-});
-
-export type Comment = t.TypeOf<typeof Comment>;
 
 export const CommentWithAuthor = t.strict({
   id: t.Int,

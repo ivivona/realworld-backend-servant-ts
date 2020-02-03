@@ -1,9 +1,9 @@
 import * as express from "express";
 import { json } from "body-parser";
 import { PathReporter } from "io-ts/lib/PathReporter";
-import { createApi } from "./ts-servant-express";
+import { createApi } from "servant-ts/dist/express";
 import { api } from "./src/api";
-import { compareWithAsync, encryptAsync, Username } from "./src/types";
+import { compareWithAsync, encryptAsync, Username } from "./src/api/types";
 import {
   User,
   CommentWithAuthor,
@@ -11,7 +11,7 @@ import {
   Profile
 } from "./src/api/types";
 import { queries, isDuplicatedKeyError } from "./src/db";
-import { SQL, SQLFragment } from "../pg-ts/dist";
+import { SQL, SQLFragment } from "pg-ts-v2";
 import { TokenExpiredError } from "jsonwebtoken";
 import { strict, Int } from "io-ts";
 import { NonEmptyString } from "io-ts-types/lib/NonEmptyString";
@@ -32,7 +32,7 @@ function idFrom(
 }
 const nothing = SQLFragment``;
 
-queries("postgresql://localhost/real-ts")
+queries(process.env.POSTGRES_DB_URL!)
   .then(({ queryAny, queryOne, queryNone }) => {
     const app = express();
     app.use(json());
